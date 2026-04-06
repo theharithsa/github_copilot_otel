@@ -1,6 +1,6 @@
 {
   "name": "@theharithsa/github_copilot_otel",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Reusable OpenTelemetry instrumentation for GitHub Copilot SDK agents with Dynatrace OTLP export",
   "type": "module",
   "main": "dist/index.js",
