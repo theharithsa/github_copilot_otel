@@ -2,19 +2,22 @@
  * telemetry.ts — OpenTelemetry bootstrap for Dynatrace OTLP export.
  *
  * Initializes the OTel NodeSDK with OTLP/HTTP protobuf exporters for
- * traces and metrics, configured for Dynatrace ingestion.
+ * traces, metrics, and logs, configured for Dynatrace ingestion.
  *
- * Call initTelemetry() BEFORE any other imports that create spans/metrics.
+ * Call initTelemetry() BEFORE any other imports that create spans/metrics/logs.
  */
 
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-proto";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-proto";
 import { PeriodicExportingMetricReader, AggregationTemporality } from "@opentelemetry/sdk-metrics";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import { trace, metrics, type Tracer, type Meter } from "@opentelemetry/api";
+import { logs, type Logger } from "@opentelemetry/api-logs";
 
 let sdk: NodeSDK | null = null;
 
@@ -71,13 +74,19 @@ export function initTelemetry(config?: TelemetryConfig): void {
     temporalityPreference: AggregationTemporality.DELTA,
   });
 
+  const logExporter = new OTLPLogExporter({
+    url: `${baseUrl}/v1/logs`,
+    headers: { Authorization: authHeader },
+  });
+
   sdk = new NodeSDK({
     resource,
     spanProcessor: new BatchSpanProcessor(traceExporter),
-    metricReader: new PeriodicExportingMetricReader({
+    metricReaders: [new PeriodicExportingMetricReader({
       exporter: metricExporter,
       exportIntervalMillis: metricExportIntervalMs,
-    }),
+    })],
+    logRecordProcessors: [new BatchLogRecordProcessor(logExporter)],
   });
 
   sdk.start();
@@ -97,4 +106,8 @@ export function getTracer(name: string): Tracer {
 
 export function getMeter(name: string): Meter {
   return metrics.getMeter(name);
+}
+
+export function getLogger(name: string): Logger {
+  return logs.getLogger(name);
 }

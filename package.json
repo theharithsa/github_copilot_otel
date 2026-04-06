@@ -1,6 +1,6 @@
 {
   "name": "@theharithsa/github_copilot_otel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reusable OpenTelemetry instrumentation for GitHub Copilot SDK agents with Dynatrace OTLP export",
   "type": "module",
   "main": "dist/index.js",
@@ -29,15 +29,22 @@
     "ai-observability"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theharithsa/github_copilot_otel"
+  },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0"
   },
   "dependencies": {
+    "@opentelemetry/api-logs": "^0.214.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "^0.214.0",
     "@opentelemetry/exporter-metrics-otlp-proto": "^0.214.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.214.0",
     "@opentelemetry/resources": "^2.6.1",
     "@opentelemetry/sdk-metrics": "^2.6.1",
     "@opentelemetry/sdk-node": "^0.214.0",
+    "@opentelemetry/sdk-logs": "^0.214.0",
     "@opentelemetry/sdk-trace-base": "^2.6.1",
     "@opentelemetry/semantic-conventions": "^1.40.0"
   },

@@ -20,11 +20,13 @@
  */
 
 import { SpanKind, SpanStatusCode, context, trace, type Span } from "@opentelemetry/api";
-import { getTracer, getMeter } from "./telemetry.js";
+import { SeverityNumber } from "@opentelemetry/api-logs";
+import { getTracer, getMeter, getLogger } from "./telemetry.js";
 
 // ─── Metrics ────────────────────────────────────────────────────────────────
 
 const meter = getMeter("copilot-sdk-agent");
+const logger = getLogger("copilot-sdk-agent");
 
 export const llmTokensTotal = meter.createCounter("copilot_sdk.llm.tokens.total", {
   description: "Total LLM tokens by model, direction, and type",
@@ -113,6 +115,13 @@ export function subscribeSessionTelemetry(
     },
   });
 
+  // Extract trace/span IDs for explicit log correlation attributes
+  const rootSpanCtx = rootSpan.spanContext();
+  const traceCorrelation = {
+    "trace_id": rootSpanCtx.traceId,
+    "span_id": rootSpanCtx.spanId,
+  };
+
   // Track active tool spans for cleanup
   const activeToolSpans = new Map<string, Span>();
 
@@ -124,6 +133,20 @@ export function subscribeSessionTelemetry(
       case "user.message": {
         const content = event.data.content as string | undefined;
         if (content) lastUserMessage += content;
+        logger.emit({
+          severityNumber: SeverityNumber.INFO,
+          severityText: "INFO",
+          body: "User message received",
+          attributes: {
+            ...traceCorrelation,
+            "gen_ai.provider.name": providerName,
+            "gen_ai.operation.name": "invoke_agent",
+            "session.id": sessionId,
+            "event.name": "user.message",
+            ...(shouldCaptureContent() && content ? { "gen_ai.prompt.content": content.substring(0, 1024) } : {}),
+          },
+          context: trace.setSpan(context.active(), rootSpan),
+        });
         break;
       }
 
@@ -212,6 +235,24 @@ export function subscribeSessionTelemetry(
         if (duration != null) {
           llmLatency.record(duration, { model: eventModel, provider: providerName });
         }
+
+        logger.emit({
+          severityNumber: SeverityNumber.INFO,
+          severityText: "INFO",
+          body: `LLM call completed: ${eventModel}`,
+          attributes: {
+            ...traceCorrelation,
+            "gen_ai.provider.name": providerName,
+            "gen_ai.operation.name": "chat",
+            "gen_ai.request.model": eventModel,
+            "session.id": sessionId,
+            ...(inputTokens != null ? { "gen_ai.usage.input_tokens": inputTokens } : {}),
+            ...(outputTokens != null ? { "gen_ai.usage.output_tokens": outputTokens } : {}),
+            ...(cost != null ? { "gen_ai.usage.cost": cost } : {}),
+            ...(duration != null ? { "gen_ai.latency_ms": duration } : {}),
+          },
+          context: trace.setSpan(context.active(), rootSpan),
+        });
         break;
       }
 
@@ -247,6 +288,22 @@ export function subscribeSessionTelemetry(
           toolsExecuted.add(1, { tool_name: "unknown", outcome: success ? "success" : "error" });
           toolSpan.end();
           activeToolSpans.delete(toolCallId);
+
+          logger.emit({
+            severityNumber: success ? SeverityNumber.INFO : SeverityNumber.ERROR,
+            severityText: success ? "INFO" : "ERROR",
+            body: `Tool execution ${success ? "completed" : "failed"}: ${event.data.toolName ?? toolCallId}`,
+            attributes: {
+              ...traceCorrelation,
+              "gen_ai.provider.name": providerName,
+              "gen_ai.operation.name": "execute_tool",
+              "gen_ai.tool.call.id": toolCallId,
+              "session.id": sessionId,
+              "outcome": success ? "success" : "error",
+              ...(error?.message ? { "error.message": error.message } : {}),
+            },
+            context: trace.setSpan(context.active(), rootSpan),
+          });
         }
         break;
       }
@@ -259,6 +316,20 @@ export function subscribeSessionTelemetry(
         const errorType = event.data.errorType as string ?? "unknown";
         rootSpan.setStatus({ code: SpanStatusCode.ERROR, message });
         rootSpan.setAttribute("error.type", errorType);
+
+        logger.emit({
+          severityNumber: SeverityNumber.ERROR,
+          severityText: "ERROR",
+          body: `Session error: ${message}`,
+          attributes: {
+            ...traceCorrelation,
+            "gen_ai.provider.name": providerName,
+            "session.id": sessionId,
+            "error.type": errorType,
+            "error.message": message,
+          },
+          context: trace.setSpan(context.active(), rootSpan),
+        });
         break;
       }
 
