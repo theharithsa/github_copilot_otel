@@ -1,4 +1,4 @@
-# @theharithsa/github_copilot_otel
+# GitHub CoPilot SDK with OTel 
 
 Reusable OpenTelemetry instrumentation for [GitHub Copilot SDK](https://github.com/github/copilot-sdk) agents, with built-in Dynatrace OTLP export.
 
